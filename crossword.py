@@ -1,0 +1,97 @@
+class Variable:
+
+    ACROSS = "across"
+    DOWN = "down"
+
+    def __init__(self, i, j, direction, length):
+        self.i = i
+        self.j = j
+        self.direction = direction
+        self.length = length
+        self.cells = [
+            (
+                self.i + (k if self.direction == Variable.DOWN else 0),
+                self.j + (k if self.direction == Variable.ACROSS else 0)
+            )
+            for k in range(self.length)
+        ]
+
+    def __hash__(self):
+        return hash((self.i, self.j, self.direction, self.length))
+
+    def __eq__(self, other):
+        return (
+            self.i == other.i
+            and self.j == other.j
+            and self.direction == other.direction
+            and self.length == other.length
+        )
+
+    def __str__(self):
+        return f"({self.i}, {self.j}) {self.direction} : {self.length}"
+
+    def __repr__(self):
+        return f"Variable({self.i}, {self.j}, {self.direction!r}, {self.length})"
+
+
+class Crossword:
+
+    def __init__(self, structure_file, words_file):
+        with open(structure_file) as f:
+            contents = f.read().splitlines()
+
+        self.height = len(contents)
+        self.width = max(len(line) for line in contents)
+        self.structure = []
+
+        for i in range(self.height):
+            row = []
+            for j in range(self.width):
+                row.append(j < len(contents[i]) and contents[i][j] == "_")
+            self.structure.append(row)
+
+        with open(words_file) as f:
+            self.words = set(f.read().upper().splitlines())
+
+        self.variables = set()
+        for i in range(self.height):
+            for j in range(self.width):
+                starts_down = self.structure[i][j] and (i == 0 or not self.structure[i - 1][j])
+                if starts_down:
+                    length = 1
+                    for k in range(i + 1, self.height):
+                        if self.structure[k][j]:
+                            length += 1
+                        else:
+                            break
+                    if length > 1:
+                        self.variables.add(Variable(i, j, Variable.DOWN, length))
+
+                starts_across = self.structure[i][j] and (j == 0 or not self.structure[i][j - 1])
+                if starts_across:
+                    length = 1
+                    for k in range(j + 1, self.width):
+                        if self.structure[i][k]:
+                            length += 1
+                        else:
+                            break
+                    if length > 1:
+                        self.variables.add(Variable(i, j, Variable.ACROSS, length))
+
+        self.overlaps = {}
+        for v1 in self.variables:
+            for v2 in self.variables:
+                if v1 == v2:
+                    continue
+                intersection = set(v1.cells).intersection(v2.cells)
+                if intersection:
+                    cell = intersection.pop()
+                    self.overlaps[v1, v2] = (v1.cells.index(cell), v2.cells.index(cell))
+                else:
+                    self.overlaps[v1, v2] = None
+
+    def neighbors(self, var):
+        return {
+            candidate for candidate in self.variables
+            if candidate != var and self.overlaps[candidate, var] is not None
+        }
